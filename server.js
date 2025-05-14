@@ -2,45 +2,32 @@
 require("dotenv").config();
 const { log } = require("console");
 const axios = require("axios");
-
-// const ngrok = require("@ngrok/ngrok");
-
-// const createError = require("http-errors");
 const express = require("express");
-// const session = require("express-session");
-// const DynamoDBStore = require("dynamodb-store");
-const path = require("path");
-// const morgan = require("morgan");
-
-// const indexRouter = require("./routes/index");
-// const devicesRouter = require("./routes/devices");
-// const oauthRouter = require("./routes/oauth");
-// const schemaRouter = require("./routes/schema");
 
 const port = process.env.PORT || 3000;
+const baseUrl = process.env.BASE_URL;
+const auth = process.env.AUTH;
 
 const app = express();
 
-// view engine setup
-// app.set("views", path.join(__dirname, "views"));
-// app.set("view engine", "ejs");
-
-// app.use(morgan("HTTP :method :url :res[location] :status :response-time ms"));
-
 app.use(express.json());
-// app.use(express.urlencoded({ extended: false }));
-// app.use(express.static(path.join(__dirname, "public")));
 
-// app.use("/schema", schemaRouter);
+app.get("/devices/:id/status", async function (req, res) {
+	console.log("** Debugging ...");
 
-// app.use("/", indexRouter);
-// app.use("/devices", devicesRouter);
-// app.use("/oauth", oauthRouter);
-// app.use("/schema", schemaRouter);
+	console.log(`-- Base url set for fetch is : ${baseUrl}`);
+	console.log(`going to fetch for devices using Authorization: ${auth} ...`);
+	const response = await getDevices();
 
-app.get("/devices", async function (req, res) {
-	getDevices();
-	res.send("done");
+	console.log("-- response (only index = 0 ): ", response[0]);
+	console.log(
+		`-- going to fetch for status of uniqueId=${response[0].id} with Authorization: ${auth}`
+	);
+	// console.log(`Url for Status fetch: ${baseUrl}/${response[0].id}/status`);
+
+	const stato = await getDeviceStatus(response[0]); //just check the only device for now... must be changed to for each later
+
+	res.send(stato);
 });
 
 // catch 404 and forward to error handler
@@ -55,22 +42,60 @@ app.use(function (err, req, res, next) {
 	res.locals.error = req.app.get("env") === "development" ? err : {};
 
 	// render the error page
-	res.status(err.status || 500);
-	res.render("error");
+	res.status(err.status || 500).json({ error: err.message });
 });
 
 app.listen(port, () => {
 	console.log("server runnning on port ", port);
 });
-// Get your endpoint online using ngrok
-// ngrok
-//     .connect({
-//         addr: port,
-//         authtoken_from_env: true,
-//         domain: process.env.NGROK_URL,
-//     })
-//     .then(listener => console.log(`Ingress established at: ${listener.url()}`));
 
-const getDevices = function () {
-	console.log("devices called ...");
-};
+const deviceMap = new Map();
+
+async function getDevices() {
+	try {
+		const response = await axios.get(baseUrl, {
+			headers: {
+				Accept: "application/json",
+				Authorization: auth,
+			},
+		});
+		// console.log(response);
+		if (response.status != 200)
+			throw new Error(`Device fetch failed : ${response.status}`);
+
+		return response.data.map(device => ({
+			name: device.name,
+			id: device.uniqueId,
+		}));
+	} catch (error) {
+		console.error(error);
+	}
+}
+
+async function getDeviceStatus(device) {
+	try {
+		console.log(
+			`--getDeviceStatus-- received params: ${JSON.stringify(device)}...`
+		);
+		console.log(
+			`--getDeviceStatus-- going to fetch device Status at: ${baseUrl}/${device.id}/status now ...`
+		);
+
+		const response = await axios.get(`${baseUrl}/${device.id}/status`, {
+			headers: {
+				Accept: "*/*",
+				Authorization: auth,
+			},
+		});
+		// console.log(response);
+		if (response.status !== 200)
+			throw new Error(`Status fetch failed : ${response.status}`);
+
+		console.log(`returned response= ${JSON.stringify(response.data)}`);
+		return response.data;
+	} catch (error) {
+		console.error(error.message);
+	}
+}
+
+// getDevices("ef58a258-d8cc-46a6-bb5a-bdccc1ed9ac8");
